@@ -1,0 +1,55 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: illusions_user
+          POSTGRES_PASSWORD: illusions_pass
+          POSTGRES_DB: illusions_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U illusions_user -d illusions_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DJANGO_SECRET_KEY: ci-test-secret-key-not-for-production
+      DEBUG: "True"
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
+      DATABASE_URL: postgres://illusions_user:illusions_pass@localhost:5432/illusions_test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Check for missing migrations
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Run tests
+        run: python manage.py test story -v 2
+
+      - name: Run production deployment checklist
+        env:
+          DEBUG: "False"
+          DJANGO_ALLOWED_HOSTS: example.com
+        run: python manage.py check --deploy
